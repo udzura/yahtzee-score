@@ -1,3 +1,4 @@
+import { toCanvas } from 'qrcode';
 import { CATEGORIES, rankings, scoreKindDice, totals, validValues, type CategoryId, type Player, type Snapshot } from './game';
 
 const app = document.querySelector<HTMLElement>('#app')!;
@@ -468,8 +469,25 @@ function share() {
 	const code = current!.room.code;
 	const url = `${location.origin}/?room=${code}`;
 	openModal(
-		`<p class="eyebrow">SAVE A SEAT FOR YOUR FRIENDS</p><h2 id="modal-title">同じテーブルに招待</h2><p class="muted">招待リンクか、8文字のルームコードを送ろう。</p><div class="share-code">${code}</div><label for="invite-url">招待リンク</label><input id="invite-url" value="${escape(url)}" readonly><button class="button button-primary" id="copy-invite">招待リンクをコピー <span>↗</span></button>${'share' in navigator ? '<button class="button button-secondary share-native" id="native-share">ほかのアプリで共有する</button>' : ''}<p class="small muted">最大6人まで。ゲーム開始後は新しく参加できません。</p>`,
+		`<p class="eyebrow">SAVE A SEAT FOR YOUR FRIENDS</p><h2 id="modal-title">同じテーブルに招待</h2><p class="muted">QRコード、招待リンク、ルームコードで参加できます。</p><figure class="invite-qr"><canvas id="invite-qr" role="img" aria-label="ルーム${escape(code)}に参加する招待リンクのQRコード" hidden>招待リンクのQRコード</canvas><figcaption id="invite-qr-status" aria-live="polite">QRコードを作成しています…</figcaption></figure><div class="share-code" aria-label="ルームコード ${escape(code)}">${code}</div><label for="invite-url">招待リンク</label><input id="invite-url" value="${escape(url)}" readonly><button class="button button-primary" id="copy-invite">招待リンクをコピー <span>↗</span></button>${'share' in navigator ? '<button class="button button-secondary share-native" id="native-share">ほかのアプリで共有する</button>' : ''}<p class="small muted">最大6人まで。ゲーム開始後は新しく参加できません。</p>`,
 	);
+	const canvas = modal.querySelector<HTMLCanvasElement>('#invite-qr')!;
+	const qrStatus = modal.querySelector<HTMLElement>('#invite-qr-status')!;
+	void toCanvas(canvas, url, {
+		width: 224,
+		margin: 4,
+		errorCorrectionLevel: 'M',
+		color: { dark: '#000000', light: '#ffffff' },
+	})
+		.then(() => {
+			if (!canvas.isConnected) return;
+			canvas.hidden = false;
+			qrStatus.textContent = 'スマートフォンのカメラで読み取って参加';
+		})
+		.catch(() => {
+			if (!qrStatus.isConnected) return;
+			qrStatus.textContent = 'QRコードを表示できませんでした。招待リンクかルームコードで参加してください。';
+		});
 	modal.querySelector('#copy-invite')!.addEventListener('click', async () => {
 		try {
 			await navigator.clipboard.writeText(url);

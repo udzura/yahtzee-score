@@ -1506,14 +1506,36 @@ dialog::backdrop {
 }
 .share-code {
 	font:
-		600 37px Arial,
+		600 30px Arial,
 		sans-serif;
 	letter-spacing: 0.14em;
 	text-align: center;
 	background: var(--green-soft);
-	padding: 24px 10px;
+	padding: 12px 10px;
 	border-radius: 8px;
-	margin-top: 23px;
+	margin-top: 12px;
+}
+.invite-qr {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	margin: 20px 0 0;
+	padding: 12px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: #fff;
+}
+.invite-qr canvas {
+	display: block;
+	width: 224px;
+	height: auto;
+	max-width: 100%;
+}
+.invite-qr figcaption {
+	font-size: 10px;
+	color: var(--muted);
+	text-align: center;
 }
 .modal-content #copy-invite {
 	margin: 18px 0 15px;

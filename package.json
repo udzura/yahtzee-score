@@ -15,10 +15,14 @@
 	},
 	"devDependencies": {
 		"@types/node": "^26.6.5",
+		"@types/qrcode": "^1.5.6",
 		"esbuild": "^0.28.2",
 		"typescript": "^5.5.2",
 		"wrangler": "^4.152.0",
 		"ws": "^8.22.0"
 	},
-	"type": "module"
+	"type": "module",
+	"dependencies": {
+		"qrcode": "^1.5.4"
+	}
 }
