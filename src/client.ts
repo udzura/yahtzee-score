@@ -1,5 +1,5 @@
 import { toCanvas } from 'qrcode';
-import { CATEGORIES, rankings, scoreKindDice, totals, validValues, type CategoryId, type Player, type Snapshot } from './game';
+import { CATEGORIES, isDiceCategory, rankings, scoreDice, totals, validValues, type CategoryId, type Player, type Snapshot } from './game';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 const modal = document.querySelector<HTMLDialogElement>('#modal')!;
@@ -117,8 +117,17 @@ function connect() {
 			ws.close();
 		}
 	};
-	ws.onclose = () => {
+	ws.onclose = (event) => {
 		clearInterval(heartbeatTimer);
+		if (event.code === 4004) {
+			stopConnection();
+			current = null;
+			store('yahtzee.lastRoom', '');
+			history.replaceState(null, '', '/');
+			modal.close();
+			home('', 'ルームの保存期限が切れました。新しいルームを作成してください。');
+			return;
+		}
 		setConnection(navigator.onLine ? 'connecting' : 'offline');
 		reconnectTimer = setTimeout(connect, reconnectDelay);
 		reconnectDelay = Math.min(reconnectDelay * 2, 15000);
@@ -154,7 +163,7 @@ function home(code = '', message = '') {
 		<form id="entry-form"><div id="entry-panel" role="tabpanel"><label for="player-name">あなたの名前<span>20文字まで</span></label><input id="player-name" name="name" autocomplete="nickname" maxlength="40" placeholder="例：たろう" value="${escape(stored('yahtzee.name'))}" required>
 		<div id="code-field" ${isInvite ? '' : 'hidden'}><label for="room-code">ルームコード</label><input id="room-code" name="code" class="code-input" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="8文字のルームコード" value="${escape(code)}"></div>
 		<p class="form-error" id="entry-error" role="alert">${escape(message)}</p><button class="button button-primary" id="entry-submit" type="submit">${isInvite ? 'ルームに参加する' : '新しいルームをつくる'}<span aria-hidden="true">↗</span></button></div></form>
-		<p class="entry-note">アカウント登録は不要です。<br>サイコロは実物をご用意ください。</p>
+		<p class="entry-note">アカウント登録は不要です。<br>サイコロは実物をご用意ください。<br>ルームの記録は最終更新から7日間保存されます。</p>
 		${!isInvite && stored('yahtzee.lastRoom') ? `<button class="resume-button" id="resume-room">前のスコア帳をひらく <span>↗</span></button>` : ''}</div>
 	</section><section class="how-it-works" aria-label="使い方"><div><span>01</span><p><strong>みんなで集まる</strong><small>URLかルームコードを共有。</small></p></div><div><span>02</span><p><strong>振ったら、記録</strong><small>役をタップして点数を選ぶだけ。</small></p></div><div><span>03</span><p><strong>最後まで、楽しむ</strong><small>13ターンの合計と順位は自動計算。</small></p></div></section>`;
 	let mode: 'create' | 'join' = isInvite ? 'join' : 'create';
@@ -268,7 +277,7 @@ function scoreSheet() {
 		.join(
 			'',
 		)}</div><div class="table-progress"><span>テーブル全体の記録</span><strong>${allComplete} / ${room.players.length * 13}</strong><progress max="${room.players.length * 13}" value="${allComplete}"></progress></div><button class="text-button" data-action="share">ルームに招待する ↗</button></aside>
-	<div class="sheet-area"><div class="player-tabs" role="tablist" aria-label="プレイヤーのスコア">${room.players.map((item, itemIndex) => `<button class="player-tab" role="tab" aria-selected="${item.id === player.id}" data-player="${item.id}" aria-controls="player-sheet">${avatar(item, itemIndex)}<span>${escape(item.name)}</span>${item.id === playerId ? '<small>自分</small>' : ''}</button>`).join('')}</div>
+	<div class="sheet-area">${room.status === 'playing' ? '<a class="text-button dice-link" href="/dice" target="_blank" rel="noopener noreferrer" aria-label="サイコロを表示する（別タブで開きます）">サイコロを表示する <span aria-hidden="true">↗</span></a>' : ''}<div class="player-tabs" role="tablist" aria-label="プレイヤーのスコア">${room.players.map((item, itemIndex) => `<button class="player-tab" role="tab" aria-selected="${item.id === player.id}" data-player="${item.id}" aria-controls="player-sheet">${avatar(item, itemIndex)}<span>${escape(item.name)}</span>${item.id === playerId ? '<small>自分</small>' : ''}</button>`).join('')}</div>
 	<div class="swipe-label"><span>←</span> 左右にフリックしてプレイヤーを切り替え <span>→</span></div>
 	<article class="score-sheet" id="player-sheet" role="tabpanel" aria-label="${escape(player.name)}のスコア"><div class="sheet-heading"><div class="player-heading">${avatar(player, index, true)}<div><p class="eyebrow">${own ? 'YOUR SCORE SHEET' : 'PLAYER SCORE SHEET'}</p><h2>${escape(player.name)}${own ? '<button class="icon-button" data-action="rename" aria-label="自分の名前を変更">✎</button>' : ''}</h2></div></div><span class="turn-count"><strong>${score.completed}</strong><span>/ 13<br>記録済み</span></span></div>
 	${!own ? '<div class="view-only">このスコアは閲覧のみです。自分のタブで記録できます。</div>' : ''}
@@ -328,7 +337,7 @@ function editScore(id: CategoryId) {
 	if (!me || me.id !== activePlayerId) return;
 	const category = CATEGORIES.find((item) => item.id === id)!;
 	const existing = me.scores[id];
-	const diceCategory = id === 'threeKind' || id === 'fourKind';
+	const diceCategory = isDiceCategory(id);
 	let version = me.version;
 	const code = current!.room.code;
 	let selected: number | undefined = existing?.value;
@@ -352,7 +361,7 @@ function editScore(id: CategoryId) {
 				.join('')}</div>`;
 	openModal(`<p class="eyebrow">${existing ? 'EDIT YOUR SCORE' : 'MARK YOUR ROLL'}</p><h2 id="modal-title">${category.name}</h2><p class="muted">${category.hint}${'fixed' in category ? ` → ${category.fixed}点` : ''}</p>${scoreInput}
 	${id !== 'yahtzee' && me.scores.yahtzee?.value === 50 ? `<label class="bonus-checkbox"><input id="extra-yahtzee" type="checkbox" ${existing?.extraYahtzee ? 'checked' : ''}><span>このターンもヤッツィー！<small>追加ボーナス +100点</small></span></label><p class="small muted">対応する数字の欄が空いていれば、まずそこに記録。埋まっていればジョーカールールで役を選んでください。</p>` : ''}
-	<p class="form-error" id="score-error" role="alert"></p><button class="button button-primary" id="save-score" ${selected === undefined ? 'disabled' : ''}>${existing ? 'スコアを修正する' : 'スコアを記録する'}<span aria-hidden="true">✓</span></button>${existing ? '<button class="text-button clear-score" id="clear-score">この記録を取り消す</button>' : '<p class="small muted score-modal-note">役が成立しなかった場合は、0点で記録できます。</p>'}`);
+	<p class="form-error" id="score-error" role="alert"></p><button class="button button-primary" id="save-score" ${selected === undefined ? 'disabled' : ''}>${existing ? 'スコアを修正する' : 'スコアを記録する'}<span aria-hidden="true">✓</span></button>${existing ? '<button class="text-button clear-score" id="clear-score">この記録を取り消す</button>' : id === 'chance' ? '<p class="small muted score-modal-note">入力した出目は、記録後も修正できます。</p>' : '<p class="small muted score-modal-note">役が成立しなかった場合は、0点で記録できます。</p>'}`);
 	const updateDice = () => {
 		if (!diceCategory) return;
 		const complete = diceValues.every((face) => face !== null);
@@ -360,9 +369,15 @@ function editScore(id: CategoryId) {
 		modal.querySelector('#discard-score')!.setAttribute('aria-pressed', 'false');
 		const result = modal.querySelector<HTMLElement>('#dice-calculation')!;
 		if (complete) {
-			const calculated = scoreKindDice(id, diceValues);
+			const calculated = scoreDice(id, diceValues);
 			selected = calculated.value;
-			result.innerHTML = `<strong>${calculated.value}点</strong><p>${calculated.dice.join(' ＋ ')} ＝ ${calculated.total}</p><small>${calculated.matches ? `${category.name}成立。5個すべての合計が得点です。` : `同じ目が${id === 'threeKind' ? 3 : 4}個以上そろっていないため、0点です。`}</small>`;
+			const explanation =
+				id === 'chance'
+					? 'どんな組み合わせでも、5個すべての合計が得点です。'
+					: calculated.matches
+						? `${category.name}成立。5個すべての合計が得点です。`
+						: `同じ目が${id === 'threeKind' ? 3 : 4}個以上そろっていないため、0点です。`;
+			result.innerHTML = `<strong>${calculated.value}点</strong><p>${calculated.dice.join(' ＋ ')} ＝ ${calculated.total}</p><small>${explanation}</small>`;
 		} else {
 			selected = undefined;
 			result.textContent = 'あと' + diceValues.filter((face) => face === null).length + '個の出目を入力してください。';
@@ -553,7 +568,7 @@ function rules() {
 <p>ヤッツィー欄に50点を記録したあと、再び5個同じ目が出たターンは、<strong>記録先の得点に加えて100点</strong>のボーナスが付きます。アプリでは、その項目の入力時に「このターンもヤッツィー！」を選んで追加します。</p>
 <p>たとえばシックス欄に30点を記録した場合、そのターンの加点は<strong>30＋100＝130点</strong>です。</p>
 <p>ヤッツィー欄が0点の場合は、ジョーカーは使えますが<strong>100点の追加ボーナスはありません。</strong></p>
-<p class="small muted">スリーカード・フォーカードは5個の出目から自動計算します。それ以外の役の成立と、ジョーカーの記録先はテーブルのみんなで確認してください。プレイ順の制限は行いません。</p><a href="https://instructions.hasbro.com/en-us/instruction/yahtzee" target="_blank" rel="noreferrer" class="text-link">Hasbro公式ルール ↗</a></div>`,
+<p class="small muted">スリーカード・フォーカード・チャンスは5個の出目から自動計算します。それ以外の役の成立と、ジョーカーの記録先はテーブルのみんなで確認してください。プレイ順の制限は行いません。</p><a href="https://instructions.hasbro.com/en-us/instruction/yahtzee" target="_blank" rel="noreferrer" class="text-link">Hasbro公式ルール ↗</a></div>`,
 	);
 }
 document.querySelector('#rules-button')!.addEventListener('click', rules);

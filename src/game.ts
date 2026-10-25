@@ -31,6 +31,7 @@ export const CATEGORIES = [
 ] as const;
 
 export type CategoryId = (typeof CATEGORIES)[number]['id'];
+export type DiceCategoryId = 'threeKind' | 'fourKind' | 'chance';
 export type ScoreEntry = { value: number; extraYahtzee: boolean; dice?: number[] };
 export type Scores = Partial<Record<CategoryId, ScoreEntry>>;
 export type Player = { id: string; name: string; scores: Scores; version: number };
@@ -40,6 +41,7 @@ export type Room = {
 	hostId: string;
 	status: 'lobby' | 'playing' | 'finished';
 	createdAt: string;
+	expiresAt?: number;
 	revision: number;
 	players: Player[];
 };
@@ -90,14 +92,18 @@ export function publicRoom(room: StoredRoom): Room {
 	return { ...room, players: room.players.map(({ sessionHash: _secret, ...player }) => player) };
 }
 
-export function scoreKindDice(id: 'threeKind' | 'fourKind', input: unknown) {
+export function isDiceCategory(id: unknown): id is DiceCategoryId {
+	return id === 'threeKind' || id === 'fourKind' || id === 'chance';
+}
+
+export function scoreDice(id: DiceCategoryId, input: unknown) {
 	if (!Array.isArray(input) || input.length !== 5 || !Array.from(input).every((face) => Number.isInteger(face) && face >= 1 && face <= 6)) {
 		throw new GameError('サイコロ5個の出目を、それぞれ1〜6で入力してください。');
 	}
 	const dice = [...input] as number[];
 	const total = dice.reduce((sum, face) => sum + face, 0);
 	const required = id === 'threeKind' ? 3 : 4;
-	const matches = dice.some((face) => dice.filter((other) => other === face).length >= required);
+	const matches = id === 'chance' || dice.some((face) => dice.filter((other) => other === face).length >= required);
 	return { dice, total, matches, value: matches ? total : 0 };
 }
 
@@ -129,8 +135,8 @@ export function recordScore(room: StoredRoom, player: PrivatePlayer, input: Reco
 	let value = input.value;
 	let dice: number[] | undefined;
 	if (value !== null && input.dice !== undefined) {
-		if (category.id !== 'threeKind' && category.id !== 'fourKind') throw new GameError('この項目では出目による計算は使えません。');
-		const calculated = scoreKindDice(category.id, input.dice);
+		if (!isDiceCategory(category.id)) throw new GameError('この項目では出目による計算は使えません。');
+		const calculated = scoreDice(category.id, input.dice);
 		value = calculated.value;
 		dice = calculated.dice;
 	}

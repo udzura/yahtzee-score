@@ -7,7 +7,7 @@ import {
 	publicRoom,
 	rankings,
 	recordScore,
-	scoreKindDice,
+	scoreDice,
 	startGame,
 	totals,
 	validValues,
@@ -135,14 +135,14 @@ test('古い版の更新を拒否し、参加者の秘密を公開しない', ()
 });
 
 test('スリーカード・フォーカードは成立時に5個すべてを合計し、不成立なら0点', () => {
-	assert.equal(scoreKindDice('threeKind', [4, 4, 4, 2, 6]).value, 20);
-	assert.equal(scoreKindDice('fourKind', [4, 4, 4, 2, 6]).value, 0);
-	assert.equal(scoreKindDice('fourKind', [2, 5, 5, 5, 5]).value, 22);
-	assert.equal(scoreKindDice('threeKind', [3, 2, 3, 2, 3]).value, 13);
-	assert.equal(scoreKindDice('threeKind', [1, 2, 3, 4, 5]).value, 0);
+	assert.equal(scoreDice('threeKind', [4, 4, 4, 2, 6]).value, 20);
+	assert.equal(scoreDice('fourKind', [4, 4, 4, 2, 6]).value, 0);
+	assert.equal(scoreDice('fourKind', [2, 5, 5, 5, 5]).value, 22);
+	assert.equal(scoreDice('threeKind', [3, 2, 3, 2, 3]).value, 13);
+	assert.equal(scoreDice('threeKind', [1, 2, 3, 4, 5]).value, 0);
 	for (const id of ['threeKind', 'fourKind'] as const) {
-		assert.equal(scoreKindDice(id, [1, 1, 1, 1, 1]).value, 5);
-		assert.equal(scoreKindDice(id, [6, 6, 6, 6, 6]).value, 30);
+		assert.equal(scoreDice(id, [1, 1, 1, 1, 1]).value, 5);
+		assert.equal(scoreDice(id, [6, 6, 6, 6, 6]).value, 30);
 	}
 	for (const dice of [
 		null,
@@ -156,7 +156,7 @@ test('スリーカード・フォーカードは成立時に5個すべてを合�
 		[4, 4, 4, null, 6],
 		new Array(5),
 	]) {
-		assert.throws(() => scoreKindDice('threeKind', dice), /サイコロ5個/);
+		assert.throws(() => scoreDice('threeKind', dice), /サイコロ5個/);
 	}
 });
 
@@ -188,5 +188,41 @@ test('出目がある追加ヤッツィーは5個すべて同じ目であるこ�
 	);
 	recordScore(room, host, { category: 'fourKind', dice: [6, 6, 6, 6, 6], extraYahtzee: true, version: 1 });
 	assert.equal(host.scores.fourKind?.value, 30);
+	assert.equal(totals(host.scores).total, 180);
+});
+
+test('チャンスは同じ目がなくても5個すべてを合計する', () => {
+	const mixed = scoreDice('chance', [1, 2, 3, 4, 5]);
+	assert.equal(mixed.value, 15);
+	assert.equal(mixed.matches, true);
+	assert.equal(scoreDice('chance', [1, 1, 1, 1, 1]).value, 5);
+	assert.equal(scoreDice('chance', [6, 6, 6, 6, 6]).value, 30);
+	assert.equal(scoreDice('chance', [2, 2, 4, 6, 6]).value, 20);
+	assert.throws(() => scoreDice('chance', [1, 2, 3, 4]), /サイコロ5個/);
+	assert.throws(() => scoreDice('chance', [1, 2, 3, 4, 7]), /サイコロ5個/);
+});
+
+test('チャンスの旧記録を出目付きで修正でき、取り消しと追加ボーナスも扱える', () => {
+	const { room, host } = game();
+	startGame(room, host);
+	const write = (input: Record<string, unknown>) =>
+		recordScore(room, host, {
+			category: 'chance',
+			extraYahtzee: false,
+			version: host.version,
+			...input,
+		});
+	write({ value: 23 });
+	assert.deepEqual(host.scores.chance, { value: 23, extraYahtzee: false });
+	write({ value: 30, dice: [1, 2, 3, 4, 5] });
+	assert.deepEqual(host.scores.chance, { value: 15, extraYahtzee: false, dice: [1, 2, 3, 4, 5] });
+	write({ dice: [1, 2, 3, 4, 6] });
+	assert.equal(host.scores.chance.value, 16);
+	write({ value: null });
+	assert.equal(host.scores.chance, undefined);
+	recordScore(room, host, { category: 'yahtzee', value: 50, extraYahtzee: false, version: host.version });
+	assert.throws(() => write({ dice: [1, 2, 3, 4, 5], extraYahtzee: true }), /5個すべて/);
+	write({ dice: [6, 6, 6, 6, 6], extraYahtzee: true });
+	assert.equal(host.scores.chance?.value, 30);
 	assert.equal(totals(host.scores).total, 180);
 });

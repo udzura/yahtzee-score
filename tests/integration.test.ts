@@ -211,6 +211,33 @@ test('出目から計算したスコアを保存して他プレイヤーへ公�
 	});
 	assert.equal(unformed.status, 200);
 	assert.equal(unformed.data.room.players[0].scores.fourKind?.value, 0);
+	const chance = await host.call(`/${code}/score`, 'PUT', {
+		category: 'chance',
+		dice: [1, 2, 3, 4, 5],
+		value: 30,
+		extraYahtzee: false,
+		version: 2,
+	});
+	assert.equal(chance.status, 200);
+	assert.deepEqual(chance.data.room.players[0].scores.chance, { value: 15, extraYahtzee: false, dice: [1, 2, 3, 4, 5] });
+	const shared = await guest.call(`/${code}`);
+	assert.deepEqual(shared.data.room.players[0].scores.chance, chance.data.room.players[0].scores.chance);
+	const edited = await host.call(`/${code}/score`, 'PUT', {
+		category: 'chance',
+		dice: [1, 2, 3, 4, 6],
+		extraYahtzee: false,
+		version: 3,
+	});
+	assert.equal(edited.status, 200);
+	assert.equal(edited.data.room.players[0].scores.chance?.value, 16);
+	const cleared = await host.call(`/${code}/score`, 'PUT', {
+		category: 'chance',
+		value: null,
+		extraYahtzee: false,
+		version: 4,
+	});
+	assert.equal(cleared.status, 200);
+	assert.equal(cleared.data.room.players[0].scores.chance, undefined);
 });
 
 test('6人上限・退出・不正JSON・別Originからの更新を検証する', async () => {

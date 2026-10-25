@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { addPlayer, cleanName, GameError, publicRoom, recordScore, startGame, type StoredRoom } from './game';
 
 const ROOM_CODE = /^[A-HJ-NP-Z2-9]{8}$/;
+const ROOM_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
 function json(body: unknown, status = 200, headers?: Record<string, string>) {
 	return Response.json(body, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
@@ -34,11 +35,18 @@ async function session(request: Request) {
 export class MyDurableObject extends DurableObject<Env> {
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
-		ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS game (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL)');
 		ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair('ping', 'pong'));
+		ctx.blockConcurrencyWhile(async () => {
+			// Existing rooms get a retention period when first accessed after this update.
+			const room = this.read();
+			if (room && room.expiresAt === undefined) await this.save(room);
+		});
 	}
 
 	private read(): StoredRoom | undefined {
+		// deleteAll() removes the schema too. Missing-room requests must not recreate it.
+		if (!this.ctx.storage.sql.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'game'").toArray().length)
+			return undefined;
 		const row = this.ctx.storage.sql.exec<{ data: string }>('SELECT data FROM game WHERE id = 1').toArray()[0];
 		return row ? JSON.parse(row.data) : undefined;
 	}
@@ -47,12 +55,15 @@ export class MyDurableObject extends DurableObject<Env> {
 		return { room: publicRoom(room), playerId: room.players.find((player) => player.sessionHash === hash)?.id ?? null };
 	}
 
-	private save(room: StoredRoom) {
+	private async save(room: StoredRoom) {
 		room.revision++;
+		room.expiresAt = Date.now() + ROOM_RETENTION_MS;
+		this.ctx.storage.sql.exec('CREATE TABLE IF NOT EXISTS game (id INTEGER PRIMARY KEY CHECK (id = 1), data TEXT NOT NULL)');
 		this.ctx.storage.sql.exec(
 			'INSERT INTO game (id, data) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data',
 			JSON.stringify(room),
 		);
+		await this.ctx.storage.setAlarm(room.expiresAt);
 		for (const socket of this.ctx.getWebSockets()) {
 			try {
 				const { playerId } = socket.deserializeAttachment() as { playerId: string };
@@ -67,14 +78,35 @@ export class MyDurableObject extends DurableObject<Env> {
 		}
 	}
 
+	private async clearRoom() {
+		for (const socket of this.ctx.getWebSockets()) socket.close(4004, 'ルームの保存期限が切れました');
+		await this.ctx.storage.deleteAll();
+	}
+
+	async alarm() {
+		await this.ctx.blockConcurrencyWhile(async () => {
+			const room = this.read();
+			// A delayed alarm must not delete a room whose deadline was extended.
+			if (room?.expiresAt && room.expiresAt > Date.now()) {
+				await this.ctx.storage.setAlarm(room.expiresAt);
+				return;
+			}
+			await this.clearRoom();
+		});
+	}
+
 	async fetch(request: Request): Promise<Response> {
 		try {
 			const url = new URL(request.url);
 			const action = url.pathname.split('/')[4] ?? '';
 			const identity = await session(request);
 			const body = ['POST', 'PUT'].includes(request.method) ? await readBody(request) : {};
-			// Keep read/mutate/save synchronous to serialize competing requests.
+			// Keep read/mutate/SQL write together, before awaiting the alarm update.
 			let room = this.read();
+			if (room?.expiresAt && room.expiresAt <= Date.now()) {
+				await this.ctx.blockConcurrencyWhile(() => this.clearRoom());
+				throw new GameError('ルームの保存期限が切れました。新しいルームを作成してください。', 404);
+			}
 			if (action === 'create' && request.method === 'POST') {
 				if (room) throw new GameError('ルームを作り直してください。', 409);
 				const id = crypto.randomUUID();
@@ -87,15 +119,15 @@ export class MyDurableObject extends DurableObject<Env> {
 					players: [],
 				};
 				addPlayer(room, identity.hash, body.name, id);
-				this.save(room);
+				await this.save(room);
 				return json(this.snapshot(room, identity.hash), 201, { 'Set-Cookie': identity.cookie });
 			}
-			if (!room) throw new GameError('ルームが見つかりません。コードを確認してください。', 404);
+			if (!room) throw new GameError('ルームが見つかりません。保存期限が切れたか、コードが間違っています。', 404);
 			const player = room.players.find((item) => item.sessionHash === identity.hash);
 			if (!action && request.method === 'GET') return json(this.snapshot(room, identity.hash));
 			if (action === 'join' && request.method === 'POST') {
 				addPlayer(room, identity.hash, body.name, crypto.randomUUID());
-				this.save(room);
+				await this.save(room);
 				return json(this.snapshot(room, identity.hash), 200, { 'Set-Cookie': identity.cookie });
 			}
 			if (!player) throw new GameError('先に名前を入力して、ルームに参加してください。', 403);
@@ -115,7 +147,7 @@ export class MyDurableObject extends DurableObject<Env> {
 				if (room.hostId === player.id) throw new GameError('ホストはルームに残ってください。', 409);
 				room.players = room.players.filter((item) => item.id !== player.id);
 			} else throw new GameError('ページが見つかりません。', 404);
-			this.save(room);
+			await this.save(room);
 			return json(this.snapshot(room, identity.hash));
 		} catch (error) {
 			if (error instanceof GameError) return json({ error: error.message }, error.status);

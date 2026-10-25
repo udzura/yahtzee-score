@@ -1,0 +1,806 @@
+<!doctype html>
+<html lang="ja">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<meta name="theme-color" content="#f5f3ec" />
+		<meta
+			name="description"
+			content="5個の3Dサイコロを振る、小さなサイコロトレイ。タップでキープ、残りを振り直し。オフラインでも使えます。"
+		/>
+		<meta
+			http-equiv="Content-Security-Policy"
+			content="default-src 'none'; script-src 'sha256-kxzzZ0LR3MUN+FUDMt77UxZFUenqY/JGzuovlO21e9U='; style-src 'sha256-KCwfs22EiANYkVPPhtUG6b1f5ONu2kq1wNN+UYlnWEw='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"
+		/>
+		<link
+			rel="icon"
+			href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23b64d32'/%3E%3Cg fill='%23fffefa'%3E%3Ccircle cx='18' cy='18' r='5'/%3E%3Ccircle cx='46' cy='18' r='5'/%3E%3Ccircle cx='32' cy='32' r='5'/%3E%3Ccircle cx='18' cy='46' r='5'/%3E%3Ccircle cx='46' cy='46' r='5'/%3E%3C/g%3E%3C/svg%3E"
+		/>
+		<title>サイコロのトレイ</title>
+		<style id="dice-style">
+			:root {
+				color-scheme: light;
+				--paper: #f5f3ec;
+				--ink: #29382e;
+				--muted: #74796c;
+				--line: #dedfd3;
+				--accent: #b64d32;
+				--size: 82px;
+				--half: 41px;
+				font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+				font-synthesis: none;
+				color: var(--ink);
+				background: var(--paper);
+				line-height: 1.7;
+			}
+			* {
+				box-sizing: border-box;
+			}
+			body {
+				margin: 0;
+			}
+			button {
+				font: inherit;
+				color: inherit;
+				cursor: pointer;
+				touch-action: manipulation;
+				-webkit-tap-highlight-color: transparent;
+			}
+			button:disabled {
+				cursor: default;
+			}
+			button:focus-visible {
+				outline: 3px solid var(--accent);
+				outline-offset: 5px;
+			}
+			.page {
+				max-width: 1040px;
+				margin: 0 auto;
+				padding: 0 30px;
+			}
+			.header {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 16px;
+				padding: 25px 0;
+				border-bottom: 1px solid var(--line);
+			}
+			.brand {
+				display: flex;
+				align-items: center;
+				gap: 10px;
+				font-weight: 600;
+				font-size: 16px;
+				letter-spacing: 0.035em;
+			}
+			.brand-mark {
+				display: grid;
+				place-items: center;
+				width: 34px;
+				height: 36px;
+				border-radius: 9px;
+				background: var(--accent);
+				color: #fffefa;
+				font-size: 33px;
+				line-height: 1;
+				transform: rotate(-8deg);
+				padding-bottom: 4px;
+			}
+			.eyebrow {
+				font:
+					10px Arial,
+					sans-serif;
+				letter-spacing: 0.15em;
+			}
+			.offline {
+				font-size: 10px;
+				color: var(--muted);
+			}
+			.offline::before {
+				content: '';
+				display: inline-block;
+				width: 5px;
+				height: 5px;
+				border-radius: 50%;
+				background: #647752;
+				margin-right: 6px;
+				vertical-align: middle;
+			}
+			.intro {
+				text-align: center;
+				padding: 35px 0 27px;
+			}
+			.intro .eyebrow {
+				color: var(--accent);
+				margin: 0 0 12px;
+			}
+			h1 {
+				font-family: Georgia, 'YuMincho', 'Hiragino Mincho ProN', serif;
+				font-weight: 500;
+				letter-spacing: 0.045em;
+				font-size: 38px;
+				line-height: 1.5;
+				margin: 0;
+			}
+			.intro > p:last-child {
+				font-size: 13px;
+				color: var(--muted);
+				margin: 10px 0 0;
+			}
+			.tray {
+				position: relative;
+				border: 7px solid #626b52;
+				border-radius: 23px;
+				padding: 29px 24px 23px;
+				background: radial-gradient(ellipse at 50% 10%, #4a6350, #304b3d 65%, #2b4438);
+				box-shadow:
+					inset 0 2px 14px #14291f60,
+					0 4px 0 #4b543e,
+					0 15px 34px #29382e0e;
+			}
+			.tray::before {
+				content: '';
+				position: absolute;
+				inset: 10px;
+				border: 1px solid #dde4b621;
+				border-radius: 11px;
+				pointer-events: none;
+			}
+			.tray-top {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				gap: 12px;
+				position: relative;
+				padding: 0 6px 6px;
+				color: #e7edda8a;
+			}
+			.tray-top > span:last-child {
+				font-size: 10px;
+				letter-spacing: 0.08em;
+			}
+			#roll-count {
+				padding: 4px 11px;
+				border: 1px solid #dde6c640;
+				border-radius: 20px;
+				background: #edf1dc12;
+				color: #edf1dc;
+				font-size: 13px;
+				font-weight: 600;
+				letter-spacing: 0.03em;
+				white-space: nowrap;
+			}
+			.dice-list {
+				display: flex;
+				justify-content: center;
+				flex-wrap: wrap;
+				gap: 12px;
+				position: relative;
+				padding: 14px 0 5px;
+			}
+			.dice-button {
+				position: relative;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				flex: 0 0 146px;
+				min-width: 0;
+				padding: 18px 8px 14px;
+				border: 1px solid transparent;
+				border-radius: 14px;
+				background: transparent;
+				user-select: none;
+				-webkit-user-select: none;
+			}
+			.dice-button:hover:not(:disabled) {
+				background: #f5f3ec09;
+			}
+			.dice-button[aria-pressed='true'] {
+				border-color: #e0e8bd80;
+				background: #e8edd211;
+			}
+			.die-stage {
+				display: block;
+				position: relative;
+				width: var(--size);
+				height: var(--size);
+				margin: 13px 0 20px;
+				perspective: 650px;
+			}
+			.die-shadow {
+				position: absolute;
+				left: -5%;
+				top: 92%;
+				width: 110%;
+				height: 20%;
+				border-radius: 50%;
+				background: #0d251cab;
+				filter: blur(6px);
+				transform: scale(1);
+			}
+			.die-motion {
+				position: absolute;
+				inset: 0;
+				transform-style: preserve-3d;
+			}
+			.die-cube {
+				position: absolute;
+				inset: 0;
+				transform-style: preserve-3d;
+			}
+			.face {
+				display: grid;
+				grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+				gap: 7%;
+				position: absolute;
+				inset: 0;
+				padding: 18%;
+				border: 1px solid #d8d5c6;
+				border-radius: 12%;
+				background: linear-gradient(135deg, #fffef8, #eeeadd);
+				box-shadow: inset 0 0 12px #fffdf0a0;
+				backface-visibility: hidden;
+			}
+			.face[data-face='1'] {
+				transform: translateZ(var(--half));
+			}
+			.face[data-face='6'] {
+				transform: rotateY(180deg) translateZ(var(--half));
+			}
+			.face[data-face='3'] {
+				transform: rotateY(90deg) translateZ(var(--half));
+			}
+			.face[data-face='4'] {
+				transform: rotateY(-90deg) translateZ(var(--half));
+			}
+			.face[data-face='2'] {
+				transform: rotateX(90deg) translateZ(var(--half));
+			}
+			.face[data-face='5'] {
+				transform: rotateX(-90deg) translateZ(var(--half));
+			}
+			.pip {
+				display: block;
+				border-radius: 50%;
+				aspect-ratio: 1;
+				visibility: hidden;
+				background: #354438;
+				box-shadow:
+					inset 1px 2px 2px #13231c44,
+					0 1px 0 #fffefa;
+			}
+			.face[data-face='1'] .pip {
+				background: var(--accent);
+			}
+			.dice-button[aria-pressed='true'] .face {
+				background: linear-gradient(135deg, #fcfff2, #e6ead4);
+				border-color: #c3c9b3;
+			}
+			.hold-marker {
+				display: block;
+				min-width: 74px;
+				padding: 3px 9px;
+				border: 1px solid #dfe8cb38;
+				border-radius: 20px;
+				font-size: 10px;
+				color: #e7edd7a6;
+				white-space: nowrap;
+			}
+			.dice-button[aria-pressed='true'] .hold-marker {
+				border-color: #e4eac7;
+				background: #e4eac7;
+				color: #354a34;
+			}
+			.tray-hint {
+				text-align: center;
+				color: #dde6d2a3;
+				font-size: 11px;
+				min-height: 20px;
+				margin: 13px 0 3px;
+				position: relative;
+			}
+			.status-row {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 15px;
+				padding: 23px 4px 18px;
+				min-height: 69px;
+			}
+			#status {
+				font-size: 12px;
+				color: var(--muted);
+				margin: 0;
+			}
+			#held-count {
+				flex-shrink: 0;
+				font-size: 11px;
+				color: #5d7054;
+				white-space: nowrap;
+			}
+			.actions {
+				display: flex;
+				justify-content: center;
+				gap: 12px;
+				margin: 6px 0 32px;
+			}
+			.motion-option {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 8px;
+				width: fit-content;
+				margin: -16px auto 28px;
+				color: var(--muted);
+				font-size: 12px;
+				cursor: pointer;
+			}
+			.motion-option input {
+				width: 16px;
+				height: 16px;
+				margin: 0;
+				accent-color: var(--ink);
+			}
+			.action {
+				min-height: 54px;
+				border-radius: 8px;
+				padding: 14px 24px;
+				font-size: 14px;
+				font-weight: 600;
+				transition: background 0.15s;
+			}
+			.primary {
+				display: flex;
+				align-items: center;
+				justify-content: center;
+				gap: 18px;
+				border: 1px solid var(--ink);
+				background: var(--ink);
+				color: #fffefa;
+				min-width: 290px;
+			}
+			.primary:hover:not(:disabled) {
+				background: #405543;
+			}
+			.primary:disabled {
+				border-color: #dfe3d8;
+				background: #dfe3d8;
+				color: #91998b;
+			}
+			.primary svg {
+				width: 20px;
+				height: 20px;
+				flex-shrink: 0;
+			}
+			.secondary {
+				background: transparent;
+				border: 1px solid #c5ccbc;
+				min-width: 130px;
+			}
+			.secondary:hover:not(:disabled) {
+				background: #e9eddf;
+			}
+			.secondary:disabled {
+				color: #a4aa9a;
+				border-color: #dedfd3;
+			}
+			.footer {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 15px;
+				color: #929585;
+				border-top: 1px solid var(--line);
+				padding: 20px 0 23px;
+			}
+			.footer > span:last-child {
+				font-size: 10px;
+			}
+			.sr-only {
+				position: absolute;
+				width: 1px;
+				height: 1px;
+				padding: 0;
+				margin: -1px;
+				overflow: hidden;
+				clip-path: inset(50%);
+				white-space: nowrap;
+				border: 0;
+			}
+			noscript {
+				display: block;
+				padding: 20px;
+				text-align: center;
+			}
+			@media (max-width: 960px) {
+				:root {
+					--size: 72px;
+					--half: 36px;
+				}
+				.dice-button {
+					flex-basis: 120px;
+				}
+				.dice-list {
+					gap: 4px;
+				}
+			}
+			@media (max-width: 760px) {
+				:root {
+					--size: 62px;
+					--half: 31px;
+				}
+				.page {
+					padding: 0 20px;
+					max-width: 540px;
+				}
+				.header {
+					padding: 21px 0;
+				}
+				.brand {
+					font-size: 14px;
+				}
+				.offline {
+					font-size: 9px;
+				}
+				.intro {
+					padding: 28px 0 23px;
+				}
+				.intro .eyebrow {
+					font-size: 9px;
+					margin-bottom: 11px;
+				}
+				h1 {
+					font-size: 29px;
+				}
+				.intro > p:last-child {
+					font-size: 11px;
+					margin-top: 11px;
+				}
+				.tray {
+					padding: 18px 12px 17px;
+					border-width: 5px;
+					border-radius: 19px;
+				}
+				.tray-top {
+					padding: 0 5px;
+				}
+				.tray-top .eyebrow {
+					font-size: 8px;
+				}
+				.tray-top > span:last-child {
+					font-size: 9px;
+				}
+				.dice-list {
+					gap: 1px 8px;
+					padding-top: 7px;
+				}
+				.dice-button {
+					flex-basis: 88px;
+					padding: 9px 3px 10px;
+					border-radius: 11px;
+				}
+				.die-stage {
+					margin: 14px 0 15px;
+				}
+				.hold-marker {
+					min-width: 64px;
+					font-size: 9px;
+					padding: 2px 7px;
+				}
+				.tray-hint {
+					font-size: 9px;
+					margin-top: 11px;
+				}
+				.status-row {
+					padding: 19px 1px 14px;
+					gap: 10px;
+					min-height: 64px;
+				}
+				#status {
+					font-size: 11px;
+				}
+				#held-count {
+					font-size: 10px;
+				}
+				.actions {
+					gap: 9px;
+					margin-bottom: 26px;
+				}
+				.action {
+					padding: 13px 15px;
+					font-size: 12px;
+				}
+				.primary {
+					min-width: 0;
+					flex: 1;
+					gap: 10px;
+				}
+				.secondary {
+					min-width: 93px;
+				}
+				.footer {
+					flex-direction: column;
+					gap: 8px;
+					padding: 20px 0;
+				}
+				.footer .eyebrow {
+					font-size: 8px;
+				}
+				.footer > span:last-child {
+					font-size: 9px;
+				}
+			}
+			@media (max-width: 370px) {
+				:root {
+					--size: 52px;
+					--half: 26px;
+				}
+				.page {
+					padding: 0 15px;
+				}
+				.brand {
+					font-size: 13px;
+					gap: 7px;
+				}
+				.brand-mark {
+					width: 30px;
+					height: 32px;
+					font-size: 29px;
+				}
+				.offline {
+					font-size: 8px;
+				}
+				h1 {
+					font-size: 26px;
+				}
+				.intro > p:last-child {
+					font-size: 10px;
+				}
+				.dice-button {
+					flex-basis: 73px;
+				}
+				.tray {
+					padding-left: 10px;
+					padding-right: 10px;
+				}
+			}
+			@media (prefers-reduced-motion: reduce) {
+				.action {
+					transition: none;
+				}
+			}
+		</style>
+	</head>
+	<body>
+		<div class="page">
+			<header class="header">
+				<div class="brand"><span class="brand-mark" aria-hidden="true">⚄</span><span>サイコロのトレイ</span></div>
+				<span class="offline">オフラインで使えます</span>
+			</header>
+			<main>
+				<section class="intro" aria-labelledby="title">
+					<p class="eyebrow">A LITTLE SOMETHING FOR THE TABLE</p>
+					<h1 id="title">ひと振り、いこう。</h1>
+					<p>5個のサイコロ。キープして、もうひと振り。</p>
+				</section>
+				<section class="tray" aria-label="5個のサイコロのトレイ">
+					<div class="tray-top">
+						<span class="eyebrow">THE DICE TRAY</span
+						><span id="roll-count" role="status" aria-live="polite" aria-atomic="true">未ロール</span>
+					</div>
+					<div class="dice-list" id="dice-list" role="group" aria-label="タップしてキープするサイコロ"></div>
+					<p class="tray-hint" id="tray-hint">まずはサイコロを振ってみよう。</p>
+				</section>
+				<div class="status-row">
+					<p id="status">サイコロを振ってはじめましょう。</p>
+					<span id="held-count">キープ 0 / 5</span>
+				</div>
+				<div class="actions">
+					<button class="action primary" id="roll" type="button">
+						<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+							<rect x="3" y="3" width="18" height="18" rx="4" />
+							<circle cx="8" cy="8" r="1" fill="currentColor" />
+							<circle cx="12" cy="12" r="1" fill="currentColor" />
+							<circle cx="16" cy="16" r="1" fill="currentColor" /></svg
+						><span id="roll-label">サイコロを振る</span>
+					</button>
+					<button class="action secondary" id="reset" type="button" disabled>リセット</button>
+				</div>
+				<label class="motion-option"><input id="animate-roll" type="checkbox" />3Dアニメーション</label>
+				<p class="sr-only" id="announcement" role="status" aria-live="polite" aria-atomic="true"></p>
+				<noscript>サイコロを振るにはJavaScriptを有効にしてください。</noscript>
+			</main>
+			<footer class="footer"><span class="eyebrow">GOOD ROLLS, GREAT COMPANY.</span><span>キープしたサイコロは、そのままに。</span></footer>
+		</div>
+		<script id="dice-script">
+			'use strict';
+
+			(() => {
+				const faceRotations = { 1: [0, 0], 2: [-90, 0], 3: [0, -90], 4: [0, 90], 5: [90, 0], 6: [0, 180] };
+				const pipPositions = { 1: [4], 2: [2, 6], 3: [2, 4, 6], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+				const diceList = document.querySelector('#dice-list');
+				const rollButton = document.querySelector('#roll');
+				const rollLabel = document.querySelector('#roll-label');
+				const resetButton = document.querySelector('#reset');
+				const animateRoll = document.querySelector('#animate-roll');
+				const status = document.querySelector('#status');
+				const heldCount = document.querySelector('#held-count');
+				const rollCounter = document.querySelector('#roll-count');
+				const trayHint = document.querySelector('#tray-hint');
+				const announcement = document.querySelector('#announcement');
+				const dice = Array.from({ length: 5 }, () => ({ value: null, held: false }));
+				let hasRolled = false;
+				let rolling = false;
+				let rollCount = 0;
+				let generation = 0;
+				let animations = [];
+				animateRoll.checked = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+				function orientation(value, xTurns = 0, yTurns = 0) {
+					const [x, y] = faceRotations[value];
+					return `rotateX(-58deg) rotateY(-24deg) rotateX(90deg) rotateX(${x + xTurns * 360}deg) rotateY(${y + yTurns * 360}deg)`;
+				}
+
+				// Reject the last four byte values so each face has the same probability.
+				function randomFace() {
+					const bytes = new Uint8Array(1);
+					do {
+						crypto.getRandomValues(bytes);
+					} while (bytes[0] >= 252);
+					return (bytes[0] % 6) + 1;
+				}
+
+				function faceMarkup(value) {
+					return `<span class="face" data-face="${value}">${Array.from({ length: 9 }, (_, index) => `<i class="pip"${pipPositions[value].includes(index) ? ' data-visible="true"' : ''}></i>`).join('')}</span>`;
+				}
+
+				diceList.innerHTML = dice
+					.map(
+						(_, index) =>
+							`<button class="dice-button" type="button" data-index="${index}" aria-pressed="false" disabled><span class="die-stage" aria-hidden="true"><span class="die-shadow"></span><span class="die-motion"><span class="die-cube">${[1, 2, 3, 4, 5, 6].map(faceMarkup).join('')}</span></span></span><span class="hold-marker">サイコロ ${index + 1}</span></button>`,
+					)
+					.join('');
+				const buttons = Array.from(diceList.querySelectorAll('.dice-button'));
+				const cubes = buttons.map((button) => button.querySelector('.die-cube'));
+				const motions = buttons.map((button) => button.querySelector('.die-motion'));
+				const shadows = buttons.map((button) => button.querySelector('.die-shadow'));
+				for (const pip of diceList.querySelectorAll('[data-visible]')) pip.style.visibility = 'visible';
+
+				function updateControls() {
+					const kept = dice.filter((die) => die.held).length;
+					const remaining = dice.length - kept;
+					const displayedCount = rollCount + Number(rolling);
+					const countLabel = displayedCount === 0 ? '未ロール' : displayedCount === 1 ? '初回' : `振り直し${displayedCount - 1}回目`;
+					if (rollCounter.textContent !== countLabel) rollCounter.textContent = countLabel;
+					heldCount.textContent = `キープ ${kept} / 5`;
+					rollButton.disabled = rolling || remaining === 0;
+					rollButton.setAttribute('aria-busy', String(rolling));
+					resetButton.disabled = !hasRolled && !rolling;
+					animateRoll.disabled = rolling;
+					rollLabel.textContent = rolling
+						? '振っています…'
+						: remaining === 0
+							? 'すべてキープ中'
+							: hasRolled
+								? `振り直す（${remaining}個）`
+								: 'サイコロを振る';
+					status.textContent = rolling
+						? 'サイコロを振っています…'
+						: !hasRolled
+							? 'サイコロを振ってはじめましょう。'
+							: remaining === 0
+								? '振り直すサイコロのキープを解除してください。'
+								: `${remaining}個のサイコロを振り直せます。`;
+					trayHint.textContent = hasRolled ? 'サイコロをタップしてキープ / 解除' : 'まずはサイコロを振ってみよう。';
+					buttons.forEach((button, index) => {
+						const die = dice[index];
+						button.disabled = rolling || !hasRolled;
+						button.setAttribute('aria-pressed', String(die.held));
+						button.setAttribute(
+							'aria-label',
+							`サイコロ${index + 1}、${die.value === null ? 'まだ振っていません' : `出目${die.value}、${die.held ? 'キープ中。タップで解除' : 'タップでキープ'}`}`,
+						);
+						button.dataset.value = die.value === null ? '' : String(die.value);
+						button.querySelector('.hold-marker').textContent = !hasRolled ? `サイコロ ${index + 1}` : die.held ? 'キープ中' : 'キープする';
+					});
+				}
+
+				function stopAnimations() {
+					for (const animation of animations) animation.cancel();
+					animations = [];
+				}
+
+				function reset() {
+					generation++;
+					stopAnimations();
+					rolling = false;
+					hasRolled = false;
+					rollCount = 0;
+					dice.forEach((die, index) => {
+						die.value = null;
+						die.held = false;
+						cubes[index].style.transform = orientation(index + 1);
+					});
+					updateControls();
+					announcement.textContent = 'リセットしました。サイコロを振ってはじめましょう。';
+				}
+
+				async function roll() {
+					if (rolling || dice.every((die) => die.held)) return;
+					const operation = ++generation;
+					const targets = dice.map((die) => (die.held ? die.value : randomFace()));
+					rolling = true;
+					updateControls();
+					announcement.textContent = 'サイコロを振っています。';
+					const reducedMotion = !animateRoll.checked;
+
+					if (!reducedMotion && typeof cubes[0].animate === 'function') {
+						dice.forEach((die, index) => {
+							if (die.held) return;
+							const duration = 850 + index * 65;
+							const options = { duration, easing: 'cubic-bezier(.18,.55,.22,1)', fill: 'forwards' };
+							animations.push(
+								cubes[index].animate(
+									[
+										{ transform: cubes[index].style.transform },
+										{ transform: orientation(targets[index], 2 + (index % 2), 3 - (index % 2)) },
+									],
+									options,
+								),
+							);
+							animations.push(
+								motions[index].animate(
+									[
+										{ transform: 'translateY(0) rotateZ(0deg)', offset: 0 },
+										{ transform: `translateY(-${30 + index * 3}px) rotateZ(${index % 2 ? -12 : 12}deg)`, offset: 0.28 },
+										{ transform: 'translateY(0) rotateZ(-4deg)', offset: 0.62 },
+										{ transform: 'translateY(-9px) rotateZ(2deg)', offset: 0.78 },
+										{ transform: 'translateY(0) rotateZ(0deg)', offset: 1 },
+									],
+									{ duration, easing: 'ease-out', fill: 'forwards' },
+								),
+							);
+							animations.push(
+								shadows[index].animate(
+									[
+										{ opacity: 1, transform: 'scale(1)', offset: 0 },
+										{ opacity: 0.35, transform: 'scale(.65)', offset: 0.28 },
+										{ opacity: 1, transform: 'scale(1)', offset: 1 },
+									],
+									{ duration, easing: 'ease-out', fill: 'forwards' },
+								),
+							);
+						});
+						await Promise.all(animations.map((animation) => animation.finished)).catch(() => {});
+					}
+
+					if (operation !== generation) return;
+					dice.forEach((die, index) => {
+						if (die.held) return;
+						die.value = targets[index];
+						cubes[index].style.transform = orientation(die.value);
+					});
+					stopAnimations();
+					rolling = false;
+					hasRolled = true;
+					rollCount++;
+					updateControls();
+					announcement.textContent = `出目は${dice.map((die) => die.value).join('、')}です。キープ${dice.filter((die) => die.held).length}個。`;
+				}
+
+				buttons.forEach((button, index) =>
+					button.addEventListener('click', () => {
+						if (rolling || !hasRolled) return;
+						dice[index].held = !dice[index].held;
+						updateControls();
+						announcement.textContent = `サイコロ${index + 1}、出目${dice[index].value}を${dice[index].held ? 'キープしました' : 'キープから解除しました'}。`;
+					}),
+				);
+				rollButton.addEventListener('click', roll);
+				resetButton.addEventListener('click', reset);
+				reset();
+			})();
+		</script>
+	</body>
+</html>

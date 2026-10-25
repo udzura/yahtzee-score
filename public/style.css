@@ -846,6 +846,11 @@ progress::-moz-progress-bar {
 	background: var(--green);
 	border-radius: 6px;
 }
+.dice-link {
+	display: block;
+	width: fit-content;
+	margin: 0 0 10px auto;
+}
 .player-tabs {
 	display: flex;
 	gap: 7px;

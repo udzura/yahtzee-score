@@ -2,3 +2,12 @@
   X-Content-Type-Options: nosniff
   Referrer-Policy: same-origin
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'
+
+# The self-contained dice page supplies a hash-based CSP in its own HTML.
+/dice
+  ! Content-Security-Policy
+  X-Frame-Options: DENY
+
+/dice.html
+  ! Content-Security-Policy
+  X-Frame-Options: DENY
