@@ -1,16 +1,24 @@
 {
-  "name": "yahtzee-score",
-  "version": "0.0.0",
-  "private": true,
-  "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev",
-    "start": "wrangler dev",
-    "cf-typegen": "wrangler types"
-  },
-  "devDependencies": {
-    "@types/node": "^26.6.5",
-    "typescript": "^5.5.2",
-    "wrangler": "^4.152.0"
-  }
+	"name": "yahtzee-score",
+	"version": "0.0.0",
+	"private": true,
+	"scripts": {
+		"deploy": "wrangler deploy",
+		"dev": "wrangler dev",
+		"start": "wrangler dev",
+		"cf-typegen": "wrangler types",
+		"build": "esbuild src/client.ts --bundle --format=esm --target=es2022 --outfile=public/assets/client.js --minify --sourcemap",
+		"typecheck": "tsc --noEmit && tsc -p tsconfig.client.json",
+		"test": "node --test tests/game.test.ts",
+		"test:integration": "node --test tests/integration.test.ts",
+		"check": "npm run typecheck && npm test"
+	},
+	"devDependencies": {
+		"@types/node": "^26.6.5",
+		"esbuild": "^0.28.2",
+		"typescript": "^5.5.2",
+		"wrangler": "^4.152.0",
+		"ws": "^8.22.0"
+	},
+	"type": "module"
 }

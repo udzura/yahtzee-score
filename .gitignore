@@ -165,3 +165,6 @@ dist
 .env*
 !.env.example
 .wrangler/
+
+# Browser bundle (built by Wrangler)
+public/assets/
