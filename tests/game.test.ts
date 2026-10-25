@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
 	addPlayer,
 	CATEGORIES,
+	categoryHint,
 	cleanName,
+	parseStraightRule,
 	publicRoom,
 	rankings,
 	recordScore,
@@ -20,6 +22,42 @@ function game() {
 	const guest = addPlayer(room, 'secret-2', 'ゲスト', 'guest');
 	return { room, host, guest };
 }
+
+test('ストレートの条件は通常と出目指定から選び、未設定のルームは通常として公開する', () => {
+	assert.equal(parseStraightRule(undefined), 'standard');
+	assert.equal(parseStraightRule('standard'), 'standard');
+	assert.equal(parseStraightRule('fixed'), 'fixed');
+	for (const value of [null, '', 'other', 1, false, ['fixed']]) assert.throws(() => parseStraightRule(value), /ストレートの条件/);
+	const { room } = game();
+	assert.equal(publicRoom(room).straightRule, 'standard');
+	room.straightRule = 'fixed';
+	assert.equal(publicRoom(room).straightRule, 'fixed');
+});
+
+test('ストレートの説明はルームの条件に合わせる', () => {
+	assert.equal(categoryHint('smallStraight'), '4つの連続した目');
+	assert.equal(categoryHint('largeStraight', 'standard'), '5つの連続した目');
+	assert.equal(categoryHint('smallStraight', 'fixed'), '1・2・3・4・5の5個（順不同）');
+	assert.equal(categoryHint('largeStraight', 'fixed'), '2・3・4・5・6の5個（順不同）');
+	assert.equal(categoryHint('chance', 'fixed'), categoryHint('chance', 'standard'));
+});
+
+test('どちらのストレート条件でも小は30点、大は40点で記録する', () => {
+	for (const rule of ['standard', 'fixed'] as const) {
+		const { room, host } = game();
+		room.straightRule = rule;
+		startGame(room, host);
+		for (const [category, value] of [
+			['smallStraight', 15],
+			['largeStraight', 20],
+		] as const) {
+			assert.throws(() => recordScore(room, host, { category, value, extraYahtzee: false, version: 0 }), /記録できる点数/);
+		}
+		recordScore(room, host, { category: 'smallStraight', value: 30, extraYahtzee: false, version: 0 });
+		recordScore(room, host, { category: 'largeStraight', value: 40, extraYahtzee: false, version: 1 });
+		assert.equal(totals(host.scores).total, 70);
+	}
+});
 
 test('2〜6人で開始し、ホストだけが開始できる', () => {
 	const { room, host, guest } = game();

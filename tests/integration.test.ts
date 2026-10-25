@@ -91,6 +91,7 @@ test(
 		const outsider = client();
 		const created = await host.call('', 'POST', { name: 'ホスト' });
 		assert.equal(created.status, 201);
+		assert.equal(created.data.room.straightRule, 'standard');
 		assert.match(created.headers.get('set-cookie')!, /HttpOnly/);
 		assert.equal(created.headers.get('cache-control'), 'no-store');
 		assert.ok(!JSON.stringify(created.data).includes('sessionHash'));
@@ -261,3 +262,49 @@ test('6人上限・退出・不正JSON・別Originからの更新を検証する
 	assert.equal(invalid.status, 400);
 	assert.equal((await host.call('/ABCDEFGH')).status, 404);
 });
+
+test(
+	'出目指定のストレート条件を保存・共有し、参加や開始後の入力では変更しない',
+	async () => {
+		const host = client();
+		assert.equal((await host.call('', 'POST', { name: '不正な条件', straightRule: 'other' })).status, 400);
+		const created = await host.call('', 'POST', { name: '指定ルール', straightRule: 'fixed' });
+		assert.equal(created.status, 201);
+		const code = created.data.room.code;
+		assert.equal(created.data.room.straightRule, 'fixed');
+		const guest = client();
+		assert.equal((await guest.call(`/${code}/join`, 'POST', { name: '参加者', straightRule: 'standard' })).data.room.straightRule, 'fixed');
+		assert.equal((await client().call(`/${code}`)).data.room.straightRule, 'fixed');
+		const ws = new WebSocket(`${base.replace('http', 'ws')}/api/rooms/${code}/live`, { headers: { Cookie: guest.cookie } });
+		const next = () =>
+			new Promise<Snapshot>((resolve, reject) => {
+				ws.once('message', (raw) => resolve(JSON.parse(raw.toString())));
+				ws.once('error', reject);
+			});
+		try {
+			assert.equal((await next()).room.straightRule, 'fixed');
+			const started = next();
+			await host.call(`/${code}/start`, 'POST', { straightRule: 'standard' });
+			assert.equal((await started).room.straightRule, 'fixed');
+			const scored = next();
+			const small = await host.call(`/${code}/score`, 'PUT', {
+				category: 'smallStraight',
+				value: 30,
+				extraYahtzee: false,
+				version: 0,
+				straightRule: 'standard',
+			});
+			assert.equal(small.status, 200);
+			assert.equal((await scored).room.straightRule, 'fixed');
+			const large = await host.call(`/${code}/score`, 'PUT', { category: 'largeStraight', value: 40, extraYahtzee: false, version: 1 });
+			assert.equal(large.status, 200);
+			const restored = await host.call(`/${code}`);
+			assert.equal(restored.data.room.straightRule, 'fixed');
+			assert.equal(restored.data.room.players[0].scores.smallStraight?.value, 30);
+			assert.equal(restored.data.room.players[0].scores.largeStraight?.value, 40);
+		} finally {
+			ws.close();
+		}
+	},
+	{ timeout: 10000 },
+);

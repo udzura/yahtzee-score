@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import { addPlayer, cleanName, GameError, publicRoom, recordScore, startGame, type StoredRoom } from './game';
+import { addPlayer, cleanName, GameError, parseStraightRule, publicRoom, recordScore, startGame, type StoredRoom } from './game';
 
 const ROOM_CODE = /^[A-HJ-NP-Z2-9]{8}$/;
 const ROOM_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -115,6 +115,7 @@ export class MyDurableObject extends DurableObject<Env> {
 					hostId: id,
 					status: 'lobby',
 					createdAt: new Date().toISOString(),
+					straightRule: parseStraightRule(body.straightRule),
 					revision: 0,
 					players: [],
 				};

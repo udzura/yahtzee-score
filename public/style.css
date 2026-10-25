@@ -25,11 +25,13 @@ body {
 }
 button,
 input,
+select,
 a {
 	-webkit-tap-highlight-color: transparent;
 }
 button,
-input {
+input,
+select {
 	font: inherit;
 }
 button,
@@ -51,14 +53,16 @@ a {
 }
 button:focus-visible,
 a:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
 	outline: 3px solid var(--accent);
 	outline-offset: 4px;
 }
 button {
 	border: 0;
 }
-input {
+input,
+select {
 	width: 100%;
 	border: 1px solid #d5d8cb;
 	border-radius: 7px;
@@ -69,12 +73,16 @@ input {
 	min-height: 49px;
 	transition: border-color 0.15s;
 }
-input:focus {
+input:focus,
+select:focus {
 	border-color: var(--green);
 	outline-color: var(--green);
 }
 input::placeholder {
 	color: #94998e;
+}
+.straight-rule-help {
+	margin-top: 8px;
 }
 h1,
 h2,
@@ -532,6 +540,11 @@ small,
 	justify-content: space-between;
 	padding: 22px 0 21px;
 	border-bottom: 1px solid var(--line);
+}
+.room-rule-note {
+	margin-top: 12px;
+	color: var(--muted);
+	font-size: 11px;
 }
 .room-bar > div {
 	display: flex;

@@ -10,7 +10,7 @@
 		/>
 		<meta
 			http-equiv="Content-Security-Policy"
-			content="default-src 'none'; script-src 'sha256-kxzzZ0LR3MUN+FUDMt77UxZFUenqY/JGzuovlO21e9U='; style-src 'sha256-KCwfs22EiANYkVPPhtUG6b1f5ONu2kq1wNN+UYlnWEw='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"
+			content="default-src 'none'; script-src 'sha256-ZneYlVvbxI28UELuCwnOltN5tB2fIFR4fhDf01S4bk0='; style-src 'sha256-KCwfs22EiANYkVPPhtUG6b1f5ONu2kq1wNN+UYlnWEw='; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'"
 		/>
 		<link
 			rel="icon"
@@ -720,7 +720,7 @@
 					dice.forEach((die, index) => {
 						die.value = null;
 						die.held = false;
-						cubes[index].style.transform = orientation(index + 1);
+						cubes[index].style.transform = orientation(randomFace());
 					});
 					updateControls();
 					announcement.textContent = 'リセットしました。サイコロを振ってはじめましょう。';

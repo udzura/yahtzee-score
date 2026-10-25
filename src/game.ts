@@ -32,6 +32,7 @@ export const CATEGORIES = [
 
 export type CategoryId = (typeof CATEGORIES)[number]['id'];
 export type DiceCategoryId = 'threeKind' | 'fourKind' | 'chance';
+export type StraightRule = 'standard' | 'fixed';
 export type ScoreEntry = { value: number; extraYahtzee: boolean; dice?: number[] };
 export type Scores = Partial<Record<CategoryId, ScoreEntry>>;
 export type Player = { id: string; name: string; scores: Scores; version: number };
@@ -42,6 +43,7 @@ export type Room = {
 	status: 'lobby' | 'playing' | 'finished';
 	createdAt: string;
 	expiresAt?: number;
+	straightRule?: StraightRule;
 	revision: number;
 	players: Player[];
 };
@@ -61,6 +63,20 @@ export function cleanName(value: unknown): string {
 	const name = value.trim();
 	if (!name || [...name].length > 20 || /[\u0000-\u001f\u007f]/u.test(name)) throw new GameError('名前は1〜20文字で入力してください。');
 	return name;
+}
+
+export function parseStraightRule(value: unknown): StraightRule {
+	if (value === undefined) return 'standard';
+	if (value === 'standard' || value === 'fixed') return value;
+	throw new GameError('ストレートの条件を選んでください。');
+}
+
+export function categoryHint(id: CategoryId, straightRule: StraightRule = 'standard'): string {
+	if (straightRule === 'fixed') {
+		if (id === 'smallStraight') return '1・2・3・4・5の5個（順不同）';
+		if (id === 'largeStraight') return '2・3・4・5・6の5個（順不同）';
+	}
+	return CATEGORIES.find((category) => category.id === id)!.hint;
 }
 
 export function totals(scores: Scores) {
@@ -89,7 +105,11 @@ export function validValues(id: CategoryId): number[] {
 }
 
 export function publicRoom(room: StoredRoom): Room {
-	return { ...room, players: room.players.map(({ sessionHash: _secret, ...player }) => player) };
+	return {
+		...room,
+		straightRule: room.straightRule ?? 'standard',
+		players: room.players.map(({ sessionHash: _secret, ...player }) => player),
+	};
 }
 
 export function isDiceCategory(id: unknown): id is DiceCategoryId {

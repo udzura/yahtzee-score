@@ -1,5 +1,17 @@
 import { toCanvas } from 'qrcode';
-import { CATEGORIES, isDiceCategory, rankings, scoreDice, totals, validValues, type CategoryId, type Player, type Snapshot } from './game';
+import {
+	CATEGORIES,
+	categoryHint,
+	isDiceCategory,
+	rankings,
+	scoreDice,
+	totals,
+	validValues,
+	type CategoryId,
+	type Player,
+	type Snapshot,
+	type StraightRule,
+} from './game';
 
 const app = document.querySelector<HTMLElement>('#app')!;
 const modal = document.querySelector<HTMLDialogElement>('#modal')!;
@@ -162,6 +174,7 @@ function home(code = '', message = '') {
 		<div class="mode-tabs" role="tablist" aria-label="参加方法"><button role="tab" id="create-tab" aria-selected="${!isInvite}" aria-controls="entry-panel">ルームをつくる</button><button role="tab" id="join-tab" aria-selected="${isInvite}" aria-controls="entry-panel">ルームに参加</button></div>
 		<form id="entry-form"><div id="entry-panel" role="tabpanel"><label for="player-name">あなたの名前<span>20文字まで</span></label><input id="player-name" name="name" autocomplete="nickname" maxlength="40" placeholder="例：たろう" value="${escape(stored('yahtzee.name'))}" required>
 		<div id="code-field" ${isInvite ? '' : 'hidden'}><label for="room-code">ルームコード</label><input id="room-code" name="code" class="code-input" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" placeholder="8文字のルームコード" value="${escape(code)}"></div>
+		<div id="straight-rule-field" ${isInvite ? 'hidden' : ''}><label for="straight-rule">ストレートの条件<span>ルーム全員に適用</span></label><select id="straight-rule" name="straightRule" aria-describedby="straight-rule-help"><option value="standard">通常：4個連続・5個連続</option><option value="fixed" ${current?.room.straightRule === 'fixed' ? 'selected' : ''}>出目指定：1〜5・2〜6</option></select><p class="small muted straight-rule-help" id="straight-rule-help">小は30点、大は40点。作成後は変更できません。</p></div>
 		<p class="form-error" id="entry-error" role="alert">${escape(message)}</p><button class="button button-primary" id="entry-submit" type="submit">${isInvite ? 'ルームに参加する' : '新しいルームをつくる'}<span aria-hidden="true">↗</span></button></div></form>
 		<p class="entry-note">アカウント登録は不要です。<br>サイコロは実物をご用意ください。<br>ルームの記録は最終更新から7日間保存されます。</p>
 		${!isInvite && stored('yahtzee.lastRoom') ? `<button class="resume-button" id="resume-room">前のスコア帳をひらく <span>↗</span></button>` : ''}</div>
@@ -173,6 +186,8 @@ function home(code = '', message = '') {
 		document.querySelector('#join-tab')!.setAttribute('aria-selected', String(mode === 'join'));
 		document.querySelector<HTMLElement>('#code-field')!.hidden = mode !== 'join';
 		document.querySelector<HTMLInputElement>('#room-code')!.required = mode === 'join';
+		document.querySelector<HTMLElement>('#straight-rule-field')!.hidden = mode !== 'create';
+		document.querySelector<HTMLSelectElement>('#straight-rule')!.disabled = mode !== 'create';
 		document.querySelector('#entry-submit')!.innerHTML =
 			`${mode === 'join' ? 'ルームに参加する' : '新しいルームをつくる'}<span aria-hidden="true">↗</span>`;
 	};
@@ -188,7 +203,12 @@ function home(code = '', message = '') {
 		document.querySelector('#entry-error')!.textContent = '';
 		try {
 			if (mode === 'join' && !/^[A-HJ-NP-Z2-9]{8}$/.test(roomCode)) throw new Error('ルームコードを8文字の英数字で入力してください。');
-			const snapshot = await api(mode === 'create' ? '' : `/${roomCode}/join`, 'POST', { name });
+			const straightRule = document.querySelector<HTMLSelectElement>('#straight-rule')!.value;
+			const snapshot = await api(
+				mode === 'create' ? '' : `/${roomCode}/join`,
+				'POST',
+				mode === 'create' ? { name, straightRule } : { name },
+			);
 			store('yahtzee.name', name);
 			enter(snapshot);
 		} catch (error) {
@@ -199,8 +219,15 @@ function home(code = '', message = '') {
 	document.querySelector('#resume-room')?.addEventListener('click', () => void loadRoom(stored('yahtzee.lastRoom')));
 }
 
+function currentStraightRule(): StraightRule {
+	const select = document.querySelector<HTMLSelectElement>('#straight-rule');
+	return select ? (select.value === 'fixed' ? 'fixed' : 'standard') : (current?.room.straightRule ?? 'standard');
+}
+function straightRuleSummary(rule: StraightRule) {
+	return rule === 'fixed' ? '出目指定：小は1〜5で30点／大は2〜6で40点' : '通常：小は4個連続で30点／大は5個連続で40点';
+}
 function roomBar() {
-	return `<div class="room-bar"><div><span class="eyebrow">TABLE NO.</span><button class="room-code-button" data-action="share" aria-label="招待リンクを表示">${current!.room.code}<span aria-hidden="true">↗</span></button></div><span class="sync-state" data-state="${connection}">${connection === 'online' ? '全員と同期中' : '同期に再接続中…'}</span></div>`;
+	return `<div class="room-bar"><div><span class="eyebrow">TABLE NO.</span><button class="room-code-button" data-action="share" aria-label="招待リンクを表示">${current!.room.code}<span aria-hidden="true">↗</span></button></div><span class="sync-state" data-state="${connection}">${connection === 'online' ? '全員と同期中' : '同期に再接続中…'}</span></div><p class="room-rule-note">ストレートの条件 · ${straightRuleSummary(current!.room.straightRule ?? 'standard')}</p>`;
 }
 function render() {
 	if (!current) {
@@ -256,7 +283,11 @@ function scoreRows(player: Player, section: 'upper' | 'lower') {
 	return CATEGORIES.filter((category) => category.section === section)
 		.map((category) => {
 			const entry = player.scores[category.id];
-			return `<button class="score-row ${entry ? 'recorded' : ''}${category.id === 'yahtzee' ? ' yahtzee-row' : ''}" data-category="${category.id}" ${own ? '' : 'disabled'} aria-label="${escape(category.name)} ${entry ? `${entry.value}点を修正` : '未記録'}"><span class="category-icon">${category.face ? die(category.face) : `<span class="role-symbol" aria-hidden="true">${({ threeKind: 'Ⅲ', fourKind: 'Ⅳ', fullHouse: '⌂', smallStraight: '↗', largeStraight: '⇗', yahtzee: '✳', chance: '✧' } as Record<string, string>)[category.id]}</span>`}</span><span class="category-name"><strong>${category.name}</strong><small>${category.face ? category.hint : category.english}${entry?.extraYahtzee ? ' · ボーナス +100' : ''}</small></span><span class="score-value ${entry?.value === 0 ? 'zero-score' : ''}">${entry ? entry.value : '<span class="empty-score">＋</span>'}</span>${own && entry ? '<span class="edit-hint" aria-hidden="true">✎</span>' : ''}</button>`;
+			const hint =
+				category.face || category.id === 'smallStraight' || category.id === 'largeStraight'
+					? categoryHint(category.id, current!.room.straightRule)
+					: category.english;
+			return `<button class="score-row ${entry ? 'recorded' : ''}${category.id === 'yahtzee' ? ' yahtzee-row' : ''}" data-category="${category.id}" ${own ? '' : 'disabled'} aria-label="${escape(category.name)} ${entry ? `${entry.value}点を修正` : '未記録'}"><span class="category-icon">${category.face ? die(category.face) : `<span class="role-symbol" aria-hidden="true">${({ threeKind: 'Ⅲ', fourKind: 'Ⅳ', fullHouse: '⌂', smallStraight: '↗', largeStraight: '⇗', yahtzee: '✳', chance: '✧' } as Record<string, string>)[category.id]}</span>`}</span><span class="category-name"><strong>${category.name}</strong><small>${hint}${entry?.extraYahtzee ? ' · ボーナス +100' : ''}</small></span><span class="score-value ${entry?.value === 0 ? 'zero-score' : ''}">${entry ? entry.value : '<span class="empty-score">＋</span>'}</span>${own && entry ? '<span class="edit-hint" aria-hidden="true">✎</span>' : ''}</button>`;
 		})
 		.join('');
 }
@@ -359,7 +390,7 @@ function editScore(id: CategoryId) {
 						`<button class="score-option ${value === 0 ? 'option-zero' : ''}" data-value="${value}" aria-pressed="${selected === value}">${value}<small>${value === 0 ? '役を捨てる' : '点'}</small></button>`,
 				)
 				.join('')}</div>`;
-	openModal(`<p class="eyebrow">${existing ? 'EDIT YOUR SCORE' : 'MARK YOUR ROLL'}</p><h2 id="modal-title">${category.name}</h2><p class="muted">${category.hint}${'fixed' in category ? ` → ${category.fixed}点` : ''}</p>${scoreInput}
+	openModal(`<p class="eyebrow">${existing ? 'EDIT YOUR SCORE' : 'MARK YOUR ROLL'}</p><h2 id="modal-title">${category.name}</h2><p class="muted">${categoryHint(category.id, currentStraightRule())}${'fixed' in category ? ` → ${category.fixed}点` : ''}</p>${scoreInput}
 	${id !== 'yahtzee' && me.scores.yahtzee?.value === 50 ? `<label class="bonus-checkbox"><input id="extra-yahtzee" type="checkbox" ${existing?.extraYahtzee ? 'checked' : ''}><span>このターンもヤッツィー！<small>追加ボーナス +100点</small></span></label><p class="small muted">対応する数字の欄が空いていれば、まずそこに記録。埋まっていればジョーカールールで役を選んでください。</p>` : ''}
 	<p class="form-error" id="score-error" role="alert"></p><button class="button button-primary" id="save-score" ${selected === undefined ? 'disabled' : ''}>${existing ? 'スコアを修正する' : 'スコアを記録する'}<span aria-hidden="true">✓</span></button>${existing ? '<button class="text-button clear-score" id="clear-score">この記録を取り消す</button>' : id === 'chance' ? '<p class="small muted score-modal-note">入力した出目は、記録後も修正できます。</p>' : '<p class="small muted score-modal-note">役が成立しなかった場合は、0点で記録できます。</p>'}`);
 	const updateDice = () => {
@@ -544,12 +575,14 @@ function rename() {
 }
 
 function rules() {
+	const straightRule = currentStraightRule();
 	openModal(
-		`<p class="eyebrow">A QUICK GUIDE</p><h2 id="modal-title">遊び方と得点</h2><div class="rules-content"><p>サイコロは実物を使って振ります。各ターンで最大3回振り、ひとつの空いている得点欄に記録。全員が13項目を埋めたら、合計点で勝負です。</p><h3>記録するとき</h3><p>自分のスコアの役をタップして、点数を選びます。成立しない役を捨てるときは0点。間違えた記録は、同じ項目をタップして修正・取り消しできます。</p><h3>数字のスコアとボーナス</h3><p>1〜6それぞれの目の合計を記録します。数字の合計が63点以上なら、35点を自動で加算します。</p><h3>役のスコア</h3><dl>${CATEGORIES.filter(
+		`<p class="eyebrow">A QUICK GUIDE</p><h2 id="modal-title">遊び方と得点</h2><div class="rules-content"><p>サイコロは実物を使って振ります。各ターンで最大3回振り、ひとつの空いている得点欄に記録。全員が13項目を埋めたら、合計点で勝負です。</p><h3>記録するとき</h3><p>自分のスコアの役をタップして、点数を選びます。成立しない役を捨てるときは0点。間違えた記録は、同じ項目をタップして修正・取り消しできます。</p><h3>数字のスコアとボーナス</h3><p>1〜6それぞれの目の合計を記録します。数字の合計が63点以上なら、35点を自動で加算します。</p><h3>ストレートの条件</h3><p>${straightRuleSummary(straightRule)}。${straightRule === 'fixed' ? '出目指定はこのアプリのカスタムルールです。' : ''}ルーム作成時に選び、全員で同じ条件を使います。</p><h3>役のスコア</h3><dl>${CATEGORIES.filter(
 			(category) => category.section === 'lower',
 		)
 			.map(
-				(category) => `<div><dt>${category.name}</dt><dd>${category.hint}${'fixed' in category ? `：${category.fixed}点` : ''}</dd></div>`,
+				(category) =>
+					`<div><dt>${category.name}</dt><dd>${categoryHint(category.id, straightRule)}${'fixed' in category ? `：${category.fixed}点` : ''}</dd></div>`,
 			)
 			.join('')}</dl>
 <h3>ジョーカールール</h3>
