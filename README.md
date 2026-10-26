@@ -94,6 +94,25 @@ npm run test:integration # ローカルWorkerを起動し、HTTP/WebSocketを使
 
 統合テストは8791番ポートと一時ディレクトリを使用します。既存の開発サーバーを使う場合は`TEST_BASE_URL=http://localhost:8787 npm run test:integration`で実行できます。
 
+## APIのレート制限
+
+Durable Objectへの転送前に、Workers Rate Limiting bindingでIP単位の制限を適用します。存在しないルームへのアクセスや不正なAPIリクエストもAPI全体の枠を消費します。
+
+| バインディング | 対象 | 1 IP・60秒あたりの設定値 |
+| --- | --- | ---: |
+| API_RATE_LIMITER | 全APIリクエスト | 300 |
+| CREATE_RATE_LIMITER | POST /api/rooms | 5 |
+| WRITE_RATE_LIMITER | 作成以外の更新・参加など | 120 |
+| LIVE_RATE_LIMITER | GET /api/rooms/:code/live（接続開始） | 60 |
+
+API全体の制限と、該当する操作別の制限を両方適用します。同じWi-Fi・携帯回線の出口IPでは枠を共有します。静的ページ、サイコロページ、接続済みWebSocketの通知やpingは対象外です。WebSocketの同時接続数の上限は今回の変更には含みません。
+
+超過時はDOを呼び出さず、JSONの日本語エラー・HTTP 429・Retry-After: 60を返します。通常操作では既存のエラー表示で案内し、WebSocketの接続失敗は既存の待機付き再接続で回復します。制限サービスのエラー時は制限を迂回せず503にします。IPはCloudflareが設定するCF-Connecting-IPを使い、CookieやX-Forwarded-Forは使用しません。ヘッダーがないローカルリクエストも共通のunknown枠で制限します。
+
+設定はwrangler.jsoncのratelimitsにあります。各simple.limitで回数、simple.periodで期間（10または60秒）を変更できます。namespace_idはこのアプリ用に26102601〜26102604を割り当てています。同じCloudflareアカウントの別Workerですでに使っているIDがあれば、重複しない正の整数文字列へ変更してください。管理画面での名前空間作成やSecretの登録は不要です。変更後はnpm run cf-typegenで型を生成し、npm run deployでコードと設定を反映します。WAFルールの手動設定は、この機能を動かすためには不要です。
+
+これはCloudflareの拠点ごとの概算制限で、設定値を一時的に超えることがあります。IP分散による回避やIPv6アドレスの切り替え、Worker自体への大量アクセス、厳密な課金上限には対応しません。TurnstileやWAFは別途追加する対策です。詳しくは[Rate Limiting公式仕様](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)を参照してください。
+
 ## デプロイ
 
 ```sh

@@ -29,6 +29,13 @@
 			}
 		]
 	},
+	// Account-wide namespace IDs: keep these distinct from other applications.
+	"ratelimits": [
+		{ "name": "API_RATE_LIMITER", "namespace_id": "26102601", "simple": { "limit": 300, "period": 60 } },
+		{ "name": "CREATE_RATE_LIMITER", "namespace_id": "26102602", "simple": { "limit": 5, "period": 60 } },
+		{ "name": "WRITE_RATE_LIMITER", "namespace_id": "26102603", "simple": { "limit": 120, "period": 60 } },
+		{ "name": "LIVE_RATE_LIMITER", "namespace_id": "26102604", "simple": { "limit": 60, "period": 60 } }
+	],
 	"observability": {
 		"enabled": true,
 		"head_sampling_rate": 1,

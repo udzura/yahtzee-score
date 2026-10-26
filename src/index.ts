@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+import { limitApiRequest } from './rate-limit';
 import { addPlayer, cleanName, GameError, parseStraightRule, publicRoom, recordScore, startGame, type StoredRoom } from './game';
 
 const ROOM_CODE = /^[A-HJ-NP-Z2-9]{8}$/;
@@ -169,6 +170,8 @@ export default {
 	async fetch(request, env): Promise<Response> {
 		const url = new URL(request.url);
 		if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
+		const limited = await limitApiRequest(request, env);
+		if (limited) return limited;
 		if (
 			(request.method !== 'GET' || request.headers.get('Upgrade')) &&
 			request.headers.get('Origin') &&

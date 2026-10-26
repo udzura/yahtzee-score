@@ -65,7 +65,8 @@ after(async () => {
 	if (temporary) await rm(temporary, { recursive: true, force: true });
 });
 
-function client() {
+let clientNumber = 0;
+function client(ip = '192.0.2.' + ++clientNumber) {
 	let cookie = '';
 	return {
 		get cookie() {
@@ -74,7 +75,7 @@ function client() {
 		async call(path = '', method = 'GET', body?: unknown) {
 			const response = await fetch(`${base}/api/rooms${path}`, {
 				method,
-				headers: { 'Content-Type': 'application/json', Cookie: cookie },
+				headers: { 'Content-Type': 'application/json', Cookie: cookie, 'CF-Connecting-IP': ip },
 				body: body === undefined ? undefined : JSON.stringify(body),
 			});
 			if (response.headers.get('set-cookie')) cookie = response.headers.get('set-cookie')!.split(';')[0];
@@ -308,3 +309,22 @@ test(
 	},
 	{ timeout: 10000 },
 );
+
+
+test('作成の連打は429になり、別IPや閲覧は引き続き利用できる', async () => {
+	const sharedIp = '198.51.100.10';
+	const statuses: number[] = [];
+	for (let i = 0; i < 6; i++) {
+		// Separate cookies on the same IP must not bypass the creation limit.
+		const response = await client(sharedIp).call('', 'POST', {});
+		statuses.push(response.status);
+		if (response.status === 429) {
+			assert.equal(response.headers.get('retry-after'), '60');
+			assert.equal(response.headers.get('cache-control'), 'no-store');
+		}
+	}
+	assert.ok(statuses.includes(429));
+	assert.ok(statuses.every((status) => status === 400 || status === 429));
+	assert.equal((await client('198.51.100.11').call('', 'POST', {})).status, 400);
+	assert.equal((await client(sharedIp).call('/ABCDEFGH')).status, 404);
+});
