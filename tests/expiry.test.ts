@@ -15,6 +15,7 @@ before(async () => {
 			resolveDir: process.cwd(),
 			contents: `
 				import worker, { MyDurableObject } from './src/index.ts';
+				export { RoomCreationQuota } from './src/room-quota.ts';
 				export default {
 					async fetch(request, env) {
 						const path = new URL(request.url).pathname.split('/');
@@ -55,13 +56,15 @@ before(async () => {
 					compatibilityDate: '2026-10-19',
 					manifest: { mainModule: 'index.js', modules: { 'index.js': { type: 'esm', contents: bundled.outputFiles[0].text } } },
 					env: {
+						DAILY_ROOM_LIMIT: { type: 'json', value: '100' },
+						ROOM_CREATION_QUOTA: { type: 'durable-object', worker: 'expiry-tests', exportName: 'RoomCreationQuota' },
 						MY_DURABLE_OBJECT: { type: 'durable-object', worker: 'expiry-tests', exportName: 'TestRoom' },
 						API_RATE_LIMITER: { type: 'rate-limit', namespace: '1', simple: { limit: 300, period: 60 } },
 						CREATE_RATE_LIMITER: { type: 'rate-limit', namespace: '2', simple: { limit: 5, period: 60 } },
 						WRITE_RATE_LIMITER: { type: 'rate-limit', namespace: '3', simple: { limit: 120, period: 60 } },
 						LIVE_RATE_LIMITER: { type: 'rate-limit', namespace: '4', simple: { limit: 60, period: 60 } },
 					},
-					exports: { TestRoom: { type: 'durable-object', storage: 'sqlite' } },
+					exports: { TestRoom: { type: 'durable-object', storage: 'sqlite' }, RoomCreationQuota: { type: 'durable-object', storage: 'sqlite' } },
 				},
 			},
 		],

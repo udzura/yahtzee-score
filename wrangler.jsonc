@@ -3,6 +3,7 @@
 	"name": "yahtzee-score",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-10-19",
+	"vars": { "DAILY_ROOM_LIMIT": "100" },
 	"build": {
 		"command": "npm run build"
 	},
@@ -19,14 +20,16 @@
 				"MyDurableObject"
 			],
 			"tag": "v1"
-		}
+		},
+		{ "tag": "v2", "new_sqlite_classes": ["RoomCreationQuota"] }
 	],
 	"durable_objects": {
 		"bindings": [
 			{
 				"class_name": "MyDurableObject",
 				"name": "MY_DURABLE_OBJECT"
-			}
+			},
+			{ "class_name": "RoomCreationQuota", "name": "ROOM_CREATION_QUOTA" }
 		]
 	},
 	// Account-wide namespace IDs: keep these distinct from other applications.

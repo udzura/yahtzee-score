@@ -1,4 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
+export { RoomCreationQuota } from './room-quota';
 import { limitApiRequest } from './rate-limit';
 import { addPlayer, cleanName, GameError, parseStraightRule, publicRoom, recordScore, startGame, type StoredRoom } from './game';
 
@@ -179,6 +180,29 @@ export default {
 		)
 			return json({ error: '同じサイトから操作してください。' }, 403);
 		if (url.pathname === '/api/rooms' && request.method === 'POST') {
+			try {
+				// Validate before spending a global slot. The room validates again on receipt.
+				const body = await readBody(request);
+				const name = cleanName(body.name);
+				const straightRule = parseStraightRule(body.straightRule);
+				const quota = await env.ROOM_CREATION_QUOTA.getByName('global-room-creation').reserve();
+				if (!quota.allowed) {
+					return json(
+						{ error: '本日のルーム作成数が上限に達しました。日本時間の午前0時以降にお試しください。既存のルームは引き続き利用できます。' },
+						429,
+						{ 'Retry-After': String(Math.max(1, Math.ceil((quota.resetAt - Date.now()) / 1000))) },
+					);
+				}
+				// Rebuild the consumed body with only validated fields.
+				request = new Request(request.url, {
+					method: 'POST', headers: request.headers, body: JSON.stringify({ name, straightRule }),
+				});
+				request.headers.delete('Content-Length');
+			} catch (error) {
+				if (error instanceof GameError) return json({ error: error.message }, error.status);
+				console.error('Room creation quota unavailable');
+				return json({ error: 'ただいまルームを作成できません。少し待ってからお試しください。' }, 503, { 'Retry-After': '60' });
+			}
 			const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 			const code = Array.from(crypto.getRandomValues(new Uint8Array(8)), (byte) => alphabet[byte % alphabet.length]).join('');
 			url.pathname = `/api/rooms/${code}/create`;
